@@ -70,6 +70,16 @@ const stages = [
   }
 ];
 
+// Water color progression (dirty -> clean). Each entry: {fill, stroke?}
+const waterColorStops = [
+  { fill:'#7a552d', stroke:'#563c1e' }, // raw
+  { fill:'#5d5a3d', stroke:'#42402b' }, // after coag
+  { fill:'#4a5d5f', stroke:'#354245' }, // after sedimentation
+  { fill:'#3d6a87', stroke:'#27465a' }, // filtration
+  { fill:'#2d7bb5', stroke:'#1a5276' }, // disinfection
+  { fill:'#2b8bdc', stroke:'#1a5276' }  // distribution (cleanest)
+];
+
 // Quiz question templates referencing stages
 const quizBank = [
   {
@@ -125,6 +135,7 @@ function init() {
   generateQuizQuestion();
   initSimulation();
   drawGraphs();
+  initSedimentation();
 }
 
 function renderStageNav() {
@@ -194,6 +205,7 @@ function positionDropletAtStage(stageIndex) {
   const segment = length / (stages.length - 1);
   const point = flowPath.getPointAtLength(segment * stageIndex);
   droplet.setAttribute('transform', `translate(${point.x}, ${point.y})`);
+  updateDropletColor(stageIndex);
 }
 
 function smoothMoveDropletToStage(targetStage) {
@@ -327,6 +339,106 @@ function shuffle(arr) {
 
 // Initialize once DOM is ready
 window.addEventListener('DOMContentLoaded', init);
+
+/* ===================== Sedimentation Particle Animation ====================== */
+let sedParticles = [];
+let sedAnimating = false;
+let sedraf = null;
+const SED_STAGE_INDEX = 2;
+
+function initSedimentation() {
+  const container = document.getElementById('sedimentParticles');
+  if (!container) return;
+  // Add linear gradient for basin if not already added
+  const svg = document.getElementById('plantDiagram');
+  if (svg && !document.getElementById('sedGrad')) {
+    const defs = svg.querySelector('defs');
+    if (defs) {
+      const lg = document.createElementNS('http://www.w3.org/2000/svg','linearGradient');
+      lg.setAttribute('id','sedGrad');
+      lg.setAttribute('x1','0'); lg.setAttribute('y1','0'); lg.setAttribute('x2','0'); lg.setAttribute('y2','1');
+      const stop1 = document.createElementNS('http://www.w3.org/2000/svg','stop');
+      stop1.setAttribute('offset','0%'); stop1.setAttribute('stop-color','#e8f2ff');
+      const stop2 = document.createElementNS('http://www.w3.org/2000/svg','stop');
+      stop2.setAttribute('offset','100%'); stop2.setAttribute('stop-color','#d7e7fa');
+      lg.appendChild(stop1); lg.appendChild(stop2); defs.appendChild(lg);
+    }
+  }
+
+  // Basin dimensions (match rect)
+  const basin = { x:380, y:100, w:170, h:220 };
+  const count = 28; // number of large floc pieces
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  sedParticles = [];
+  container.innerHTML = '';
+  for (let i=0;i<count;i++) {
+    const r = 4 + Math.random()*7; // radius
+    const startX = basin.x + 8 + Math.random()*(basin.w-16);
+    const startY = basin.y + 10 + Math.random()* (basin.h*0.35); // start upper portion
+    const vx = (Math.random()-0.5)*8; // gentle horizontal drift
+    const vy = 8 + Math.random()*14; // downward speed (px per 10s frame baseline)
+    const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    circle.setAttribute('cx', startX);
+    circle.setAttribute('cy', startY);
+    circle.setAttribute('r', r);
+    circle.classList.add('sed-particle');
+    if (r < 6) circle.classList.add('small'); else if (r > 9) circle.classList.add('large');
+    container.appendChild(circle);
+    sedParticles.push({ el: circle, x:startX, y:startY, r, vx, vy, settled:false, settleDelay: 300 + Math.random()*1200 });
+  }
+  // Add a thin sludge layer representation
+  let sludge = container.querySelector('rect.sludge');
+  if (!sludge) {
+    sludge = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    sludge.classList.add('sludge');
+    sludge.setAttribute('x', basin.x+2); sludge.setAttribute('y', basin.y + basin.h - 14);
+    sludge.setAttribute('width', basin.w-4); sludge.setAttribute('height', 12);
+    sludge.setAttribute('fill', '#b2c0d1'); sludge.setAttribute('opacity','0.4');
+    container.appendChild(sludge);
+  }
+  if (!prefersReduced && currentStage === SED_STAGE_INDEX) startSedAnimation();
+}
+
+function startSedAnimation() {
+  if (sedAnimating) return;
+  sedAnimating = true;
+  let last = performance.now();
+  const basinBottom = 100 + 220 - 16; // y bottom inside clip minus sludge layer
+  function frame(now) {
+    if (!sedAnimating) return;
+    const dt = Math.min(100, now - last); // ms
+    last = now;
+    const speedScale = speedMultiplier; // tie to global speed control
+    sedParticles.forEach(p => {
+      if (p.settled) return;
+      p.y += (p.vy * dt/1000) * speedScale;
+      p.x += (p.vx * dt/16000) * speedScale; // slow horizontal drift
+      // gentle drag on vx
+      p.vx *= 0.995;
+      if (p.y >= basinBottom - p.r) {
+        p.y = basinBottom - p.r;
+        // small random offset over time imitates compression/consolidation
+        p.settleDelay -= dt;
+        if (p.settleDelay <= 0) {
+          p.settled = true;
+          p.el.style.opacity = 0.9;
+        } else {
+          // wobble while settling
+          p.x += Math.sin(now/300 + p.r) * 0.2;
+        }
+      }
+      p.el.setAttribute('cx', p.x.toFixed(2));
+      p.el.setAttribute('cy', p.y.toFixed(2));
+    });
+    sedraf = requestAnimationFrame(frame);
+  }
+  sedraf = requestAnimationFrame(frame);
+}
+
+function stopSedAnimation() {
+  sedAnimating = false;
+  if (sedraf) cancelAnimationFrame(sedraf);
+}
 
 /* ===================== Simulation & Graphs ====================== */
 // Grab elements (they may be null if section not present)
@@ -523,4 +635,62 @@ const _origGoto = gotoStage;
 gotoStage = function(i, userInitiated=false) {
   _origGoto(i, userInitiated);
   drawGraphs();
+  if (i === SED_STAGE_INDEX) {
+    // Re-initialize particles each time user returns (fresh batch)
+    initSedimentation();
+  } else {
+    stopSedAnimation();
+  }
+  animatePipeFromStage(i-1, i);
+  updateDropletColor(i);
 };
+
+/* ===================== Pipe Animation & Color Evolution ====================== */
+function animatePipeFromStage(from, to) {
+  if (from < 0 || to <= from) return; // first stage has no incoming pipe
+  const pipe = document.querySelector(`.pipe[data-from="${from}"][data-to="${to}"]`);
+  if (!pipe) return;
+  const water = pipe.querySelector('.pipe-water');
+  pipe.setAttribute('data-filled','false');
+  water.style.width = '0px';
+  // Determine duration scaled by speed
+  const duration = 900 / speedMultiplier;
+  const start = performance.now();
+  function step(now) {
+    const progress = Math.min(1, (now - start)/duration);
+    const eased = easeInOutCubic(progress);
+    water.style.width = (30 * eased) + 'px';
+    if (progress < 1) {
+      if (progress < 0.33) pipe.setAttribute('data-stage-progress','early');
+      else if (progress < 0.66) pipe.setAttribute('data-stage-progress','mid');
+      else pipe.setAttribute('data-stage-progress','late');
+      requestAnimationFrame(step);
+    } else {
+      pipe.setAttribute('data-filled','true');
+      pipe.removeAttribute('data-stage-progress');
+    }
+  }
+  requestAnimationFrame(step);
+  // Update water gradient morph (we approximate by blending colors)
+  updatePipeWaterColors();
+}
+
+function updatePipeWaterColors() {
+  // For each pipe already filled, set water color based on 'to' stage index
+  document.querySelectorAll('.pipe').forEach(pipe => {
+    const to = Number(pipe.getAttribute('data-to'));
+    const water = pipe.querySelector('.pipe-water');
+    if (!water) return;
+    const color = waterColorStops[Math.min(to, waterColorStops.length-1)];
+    // Interpolate from dirty to this stage color by to/stages.length
+    water.setAttribute('fill', color.fill);
+  });
+}
+
+function updateDropletColor(stageIndex) {
+  const idx = Math.min(stageIndex, waterColorStops.length-1);
+  const color = waterColorStops[idx];
+  const path = droplet.querySelector('path');
+  path.setAttribute('fill', color.fill);
+  path.setAttribute('stroke', color.stroke);
+}
