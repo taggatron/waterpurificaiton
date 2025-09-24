@@ -115,6 +115,10 @@ footer { font-size:.75rem; }
 .pipe[data-stage-progress="mid"] .pipe-water { filter:brightness(1) saturate(1); }
 .pipe[data-stage-progress="late"] .pipe-water { filter:brightness(1.1) saturate(1.3); }
 
+/* Flow shimmer (mask pattern translation handled via JS fallback; CSS keyframes for future) */
+@keyframes flowShift { from { transform:translateX(0); } to { transform:translateX(-40px); } }
+.pipe[data-filled="true"] .pipe-water { position:relative; }
+
 /* Droplet color will transition via inline style updates; ensure smooth */
 #droplet path { transition: fill 1s linear, stroke 1s linear; }
 

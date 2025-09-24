@@ -59,23 +59,23 @@
             <!-- Each pipe group: outer (pipe) + inner (water) clip -->
             <g class="pipe" data-from="0" data-to="1">
               <rect x="160" y="188" width="30" height="24" rx="6" class="pipe-shell" />
-              <rect x="160" y="192" width="0" height="16" class="pipe-water" />
+              <rect x="160" y="192" width="0" height="16" class="pipe-water" mask="url(#flowMask)" />
             </g>
             <g class="pipe" data-from="1" data-to="2">
               <rect x="350" y="188" width="30" height="24" rx="6" class="pipe-shell" />
-              <rect x="350" y="192" width="0" height="16" class="pipe-water" />
+              <rect x="350" y="192" width="0" height="16" class="pipe-water" mask="url(#flowMask)" />
             </g>
             <g class="pipe" data-from="2" data-to="3">
               <rect x="550" y="188" width="30" height="24" rx="6" class="pipe-shell" />
-              <rect x="550" y="192" width="0" height="16" class="pipe-water" />
+              <rect x="550" y="192" width="0" height="16" class="pipe-water" mask="url(#flowMask)" />
             </g>
             <g class="pipe" data-from="3" data-to="4">
               <rect x="750" y="188" width="30" height="24" rx="6" class="pipe-shell" />
-              <rect x="750" y="192" width="0" height="16" class="pipe-water" />
+              <rect x="750" y="192" width="0" height="16" class="pipe-water" mask="url(#flowMask)" />
             </g>
             <g class="pipe" data-from="4" data-to="5">
               <rect x="950" y="188" width="30" height="24" rx="6" class="pipe-shell" />
-              <rect x="950" y="192" width="0" height="16" class="pipe-water" />
+              <rect x="950" y="192" width="0" height="16" class="pipe-water" mask="url(#flowMask)" />
             </g>
           </g>
 
@@ -100,6 +100,15 @@
               <stop offset="0%" stop-color="#2b6cb0" />
               <stop offset="100%" stop-color="#66b2ff" />
             </linearGradient>
+            <!-- Animated flow pattern (used as mask to create shimmer) -->
+            <pattern id="flowPattern" width="40" height="8" patternUnits="userSpaceOnUse">
+              <rect width="40" height="8" fill="rgba(255,255,255,0.15)" />
+              <path d="M0 4 L10 0 L20 4 L30 0 L40 4 L40 8 L30 4 L20 8 L10 4 L0 8 Z" fill="rgba(255,255,255,0.35)" />
+            </pattern>
+            <mask id="flowMask">
+              <rect width="100%" height="100%" fill="black" />
+              <rect id="flowMaskMover" x="0" y="0" width="400" height="400" fill="url(#flowPattern)"></rect>
+            </mask>
           </defs>
 
           <!-- Water Droplet (animated along path) -->

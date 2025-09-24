@@ -126,6 +126,10 @@ const autoAdvanceChk = document.getElementById('autoAdvance');
 
 const droplet = document.getElementById('droplet');
 const flowPath = document.getElementById('flowPath');
+// We'll also manage a manual horizontal droplet path to keep droplet under stage.
+let manualDropletMode = true;
+let shimmerRAF = null;
+let shimmerActive = false;
 
 function init() {
   renderStageNav();
@@ -136,6 +140,7 @@ function init() {
   initSimulation();
   drawGraphs();
   initSedimentation();
+  startShimmer();
 }
 
 function renderStageNav() {
@@ -201,39 +206,48 @@ function focusStageContent() {
 }
 
 function positionDropletAtStage(stageIndex) {
-  const length = flowPath.getTotalLength();
-  const segment = length / (stages.length - 1);
-  const point = flowPath.getPointAtLength(segment * stageIndex);
-  droplet.setAttribute('transform', `translate(${point.x}, ${point.y})`);
+  if (!manualDropletMode) {
+    const length = flowPath.getTotalLength();
+    const segment = length / (stages.length - 1);
+    const point = flowPath.getPointAtLength(segment * stageIndex);
+    droplet.setAttribute('transform', `translate(${point.x}, ${point.y})`);
+  } else {
+    // Anchor Y near center baseline of pipes (200), slightly below them for clarity
+    const stageGroup = document.querySelector(`.stage-block[data-stage="${stageIndex}"] rect`);
+    if (stageGroup) {
+      const x = parseFloat(stageGroup.getAttribute('x')) + parseFloat(stageGroup.getAttribute('width'))/2;
+      const y = 322; // original path y ~320; keep near that baseline
+      droplet.setAttribute('transform', `translate(${x}, ${y})`);
+    }
+  }
   updateDropletColor(stageIndex);
 }
 
 function smoothMoveDropletToStage(targetStage) {
   cancelAnimationFrame(dropletAnimationFrame);
-  const length = flowPath.getTotalLength();
-  const segment = length / (stages.length - 1);
-  const targetL = segment * targetStage;
-
-  // Find current position by reading current translate
+  if (!manualDropletMode) {
+    // fallback to original path approach
+  }
   const match = /translate\(([-0-9.]+),\s*([-0-9.]+)\)/.exec(droplet.getAttribute('transform'));
   let currentPoint = { x: 0, y: 0 };
   if (match) currentPoint = { x: parseFloat(match[1]), y: parseFloat(match[2]) };
-
-  const currentLengthGuess = nearestLengthForPoint(currentPoint, flowPath, length, 20);
-
-  const duration = 900 / speedMultiplier;
+  const targetRect = document.querySelector(`.stage-block[data-stage="${targetStage}"] rect`);
+  if (!targetRect) return;
+  const targetX = parseFloat(targetRect.getAttribute('x')) + parseFloat(targetRect.getAttribute('width'))/2;
+  // Keep a stable Y; if currentPoint.y is 0 (initial load), set baseline once
+  const baseY = 322;
+  const targetY = manualDropletMode ? baseY : currentPoint.y || baseY;
+  const duration = 700 / speedMultiplier;
   const start = performance.now();
-
+  droplet.classList.remove('animate-droplet');
   function animate(t) {
-    const elapsed = t - start;
-    const progress = Math.min(1, elapsed / duration);
+    const progress = Math.min(1, (t-start)/duration);
     const eased = easeInOutCubic(progress);
-    const pos = currentLengthGuess + (targetL - currentLengthGuess) * eased;
-    const p = flowPath.getPointAtLength(pos);
-    droplet.setAttribute('transform', `translate(${p.x}, ${p.y})`);
+    const x = currentPoint.x + (targetX - currentPoint.x)*eased;
+    const y = currentPoint.y + (targetY - currentPoint.y)*eased;
+    droplet.setAttribute('transform', `translate(${x}, ${y})`);
     if (progress < 1) dropletAnimationFrame = requestAnimationFrame(animate); else droplet.classList.add('animate-droplet');
   }
-  droplet.classList.remove('animate-droplet');
   dropletAnimationFrame = requestAnimationFrame(animate);
 }
 
@@ -367,12 +381,14 @@ function initSedimentation() {
 
   // Basin dimensions (match rect)
   const basin = { x:380, y:100, w:170, h:220 };
-  const count = 28; // number of large floc pieces
+  // particle count dynamically influenced by coag efficiency if available later
+  let eff = (simCache && simCache.eff) ? simCache.eff : 0.7; // default mid
+  const count = Math.round(18 + eff * 20);
   const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   sedParticles = [];
   container.innerHTML = '';
   for (let i=0;i<count;i++) {
-    const r = 4 + Math.random()*7; // radius
+  const r = 3 + Math.random()* (5 + eff*4); // radius scales slightly with efficiency
     const startX = basin.x + 8 + Math.random()*(basin.w-16);
     const startY = basin.y + 10 + Math.random()* (basin.h*0.35); // start upper portion
     const vx = (Math.random()-0.5)*8; // gentle horizontal drift
@@ -397,6 +413,7 @@ function initSedimentation() {
     container.appendChild(sludge);
   }
   if (!prefersReduced && currentStage === SED_STAGE_INDEX) startSedAnimation();
+  updateSedWaterClarity(eff);
 }
 
 function startSedAnimation() {
@@ -438,6 +455,23 @@ function startSedAnimation() {
 function stopSedAnimation() {
   sedAnimating = false;
   if (sedraf) cancelAnimationFrame(sedraf);
+}
+
+function updateSedWaterClarity(eff) {
+  // Eff closer to 1 -> clearer (lighter, more bluish)
+  const rect = document.querySelector('#stage-sedimentation rect');
+  if (!rect) return;
+  const baseColor = { r: 226, g: 237, b: 255 }; // original
+  // Mix with a murkier tone when low efficiency
+  const murk = { r: 170, g: 180, b: 195 };
+  const mix = (a,b,t)=> Math.round(a + (b-a)*t);
+  const clarity = Math.min(1, eff); // 0.4..1 typical
+  const r = mix(murk.r, baseColor.r, clarity);
+  const g = mix(murk.g, baseColor.g, clarity);
+  const b = mix(murk.b, baseColor.b, clarity);
+  rect.setAttribute('fill', `rgb(${r},${g},${b})`);
+  // Adjust particle opacity (clearer water -> particles slightly more distinct lower)
+  sedParticles.forEach(p=>{ if(p.el) p.el.style.opacity = (0.5 + clarity*0.5); });
 }
 
 /* ===================== Simulation & Graphs ====================== */
@@ -517,6 +551,10 @@ function runSimulation() {
   });
   simCache = { dose, mix, time, eff, turbidityValues, microbeValues };
   renderLabMetrics();
+  // Update sedimentation environment if currently on that stage
+  if (currentStage === SED_STAGE_INDEX) {
+    initSedimentation();
+  }
 }
 
 function renderLabMetrics() {
@@ -693,4 +731,28 @@ function updateDropletColor(stageIndex) {
   const path = droplet.querySelector('path');
   path.setAttribute('fill', color.fill);
   path.setAttribute('stroke', color.stroke);
+}
+
+/* ===================== Shimmer Animation ====================== */
+function startShimmer() {
+  if (shimmerActive) return;
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (prefersReduced) return; // honor accessibility
+  shimmerActive = true;
+  const mover = document.getElementById('flowMaskMover');
+  if (!mover) return;
+  let offset = 0;
+  function loop(ts) {
+    if (!shimmerActive) return;
+    offset -= 0.6 * speedMultiplier; // speed tied to global speed
+    if (offset <= -40) offset = 0;
+    mover.setAttribute('x', offset.toFixed(2));
+    shimmerRAF = requestAnimationFrame(loop);
+  }
+  shimmerRAF = requestAnimationFrame(loop);
+}
+
+function stopShimmer() {
+  shimmerActive = false;
+  if (shimmerRAF) cancelAnimationFrame(shimmerRAF);
 }
