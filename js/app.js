@@ -130,6 +130,35 @@ const flowPath = document.getElementById('flowPath');
 let manualDropletMode = true;
 let shimmerRAF = null;
 let shimmerActive = false;
+// Droplet stabilization & bobbing
+let dropletBasePos = { x: 0, y: 322 }; // baseline y just below pipes
+let dropletBobRAF = null;
+let dropletMoving = false;
+const DROPLET_BOB_PERIOD = 3000; // ms (matches stage pulse 3s)
+const DROPLET_BOB_AMPLITUDE = 4; // px vertical travel (peak to center)
+
+function startDropletBob() {
+  stopDropletBob();
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (prefersReduced) return;
+  function bob(t) {
+    // Adjust period by speed multiplier so higher speed tightens the bob
+    const period = DROPLET_BOB_PERIOD / speedMultiplier;
+    const phase = (t % period) / period; // 0..1
+    const offsetY = Math.sin(phase * Math.PI * 2) * DROPLET_BOB_AMPLITUDE; // -A..A
+    // Only apply bob if not in the middle of a horizontal move
+    if (!dropletMoving) {
+      droplet.setAttribute('transform', `translate(${dropletBasePos.x}, ${dropletBasePos.y + offsetY})`);
+    }
+    dropletBobRAF = requestAnimationFrame(bob);
+  }
+  dropletBobRAF = requestAnimationFrame(bob);
+}
+
+function stopDropletBob() {
+  if (dropletBobRAF) cancelAnimationFrame(dropletBobRAF);
+  dropletBobRAF = null;
+}
 
 function init() {
   renderStageNav();
@@ -210,21 +239,25 @@ function positionDropletAtStage(stageIndex) {
     const length = flowPath.getTotalLength();
     const segment = length / (stages.length - 1);
     const point = flowPath.getPointAtLength(segment * stageIndex);
-    droplet.setAttribute('transform', `translate(${point.x}, ${point.y})`);
+    dropletBasePos.x = point.x; dropletBasePos.y = point.y;
+    droplet.setAttribute('transform', `translate(${dropletBasePos.x}, ${dropletBasePos.y})`);
   } else {
     // Anchor Y near center baseline of pipes (200), slightly below them for clarity
     const stageGroup = document.querySelector(`.stage-block[data-stage="${stageIndex}"] rect`);
     if (stageGroup) {
       const x = parseFloat(stageGroup.getAttribute('x')) + parseFloat(stageGroup.getAttribute('width'))/2;
       const y = 322; // original path y ~320; keep near that baseline
-      droplet.setAttribute('transform', `translate(${x}, ${y})`);
+      dropletBasePos.x = x; dropletBasePos.y = y;
+      droplet.setAttribute('transform', `translate(${dropletBasePos.x}, ${dropletBasePos.y})`);
     }
   }
   updateDropletColor(stageIndex);
+  startDropletBob();
 }
 
 function smoothMoveDropletToStage(targetStage) {
   cancelAnimationFrame(dropletAnimationFrame);
+  stopDropletBob(); // pause bob during movement
   if (!manualDropletMode) {
     // fallback to original path approach
   }
@@ -239,14 +272,22 @@ function smoothMoveDropletToStage(targetStage) {
   const targetY = manualDropletMode ? baseY : currentPoint.y || baseY;
   const duration = 700 / speedMultiplier;
   const start = performance.now();
-  droplet.classList.remove('animate-droplet');
+  dropletMoving = true;
+  droplet.classList.remove('animate-droplet'); // legacy horizontal wiggle; disabled while we manage bob manually
   function animate(t) {
     const progress = Math.min(1, (t-start)/duration);
     const eased = easeInOutCubic(progress);
     const x = currentPoint.x + (targetX - currentPoint.x)*eased;
     const y = currentPoint.y + (targetY - currentPoint.y)*eased;
     droplet.setAttribute('transform', `translate(${x}, ${y})`);
-    if (progress < 1) dropletAnimationFrame = requestAnimationFrame(animate); else droplet.classList.add('animate-droplet');
+    if (progress < 1) {
+      dropletAnimationFrame = requestAnimationFrame(animate);
+    } else {
+      // store base position & restart bob
+      dropletBasePos.x = targetX; dropletBasePos.y = targetY;
+      dropletMoving = false;
+      startDropletBob();
+    }
   }
   dropletAnimationFrame = requestAnimationFrame(animate);
 }
@@ -689,6 +730,9 @@ function animatePipeFromStage(from, to) {
   const pipe = document.querySelector(`.pipe[data-from="${from}"][data-to="${to}"]`);
   if (!pipe) return;
   const water = pipe.querySelector('.pipe-water');
+  // Highlight only the active (currently filling) pipe
+  document.querySelectorAll('.pipe.active-flow').forEach(p => p.classList.remove('active-flow'));
+  pipe.classList.add('active-flow');
   pipe.setAttribute('data-filled','false');
   water.style.width = '0px';
   // Determine duration scaled by speed
@@ -706,6 +750,7 @@ function animatePipeFromStage(from, to) {
     } else {
       pipe.setAttribute('data-filled','true');
       pipe.removeAttribute('data-stage-progress');
+      pipe.classList.remove('active-flow'); // remove highlight once complete
     }
   }
   requestAnimationFrame(step);
