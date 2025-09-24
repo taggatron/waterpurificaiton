@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Interactive Water Purification Stages</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>How Water Treatment Works</h1>
+    <p class="tagline">Explore each stage and see water get cleaner step by step.</p>
+  </header>
+
+  <main id="app" class="app" aria-live="polite">
+    <section class="visual-panel" aria-label="Animated water treatment plant diagram">
+      <div class="plant-wrapper">
+        <!-- SVG Diagram -->
+        <svg id="plantDiagram" viewBox="0 0 1200 400" role="img" aria-describedby="diagramDesc">
+          <desc id="diagramDesc">Simplified water treatment plant showing stages from intake to distribution.</desc>
+          <!-- Background -->
+          <rect x="0" y="0" width="1200" height="400" fill="#f5f9ff" />
+
+          <!-- Stage Containers (rectangles) -->
+          <g id="stage-intake" class="stage-block" data-stage="0">
+            <rect x="20" y="80" width="140" height="240" rx="12" fill="#d0e7ff" stroke="#2b6cb0" stroke-width="3" />
+            <text x="90" y="210" text-anchor="middle" class="stage-label">Intake</text>
+          </g>
+
+          <g id="stage-coagulation" class="stage-block" data-stage="1">
+            <rect x="190" y="60" width="160" height="280" rx="12" fill="#dce7ff" stroke="#2c5282" stroke-width="3" />
+            <text x="270" y="210" text-anchor="middle" class="stage-label">Coagulation & Flocculation</text>
+          </g>
+
+          <g id="stage-sedimentation" class="stage-block" data-stage="2">
+            <rect x="380" y="100" width="170" height="220" rx="12" fill="#e2edff" stroke="#2b436b" stroke-width="3" />
+            <text x="465" y="210" text-anchor="middle" class="stage-label">Sedimentation</text>
+          </g>
+
+          <g id="stage-filtration" class="stage-block" data-stage="3">
+            <rect x="580" y="70" width="170" height="260" rx="12" fill="#e6f4ff" stroke="#234e52" stroke-width="3" />
+            <text x="665" y="210" text-anchor="middle" class="stage-label">Filtration</text>
+          </g>
+
+          <g id="stage-disinfection" class="stage-block" data-stage="4">
+            <rect x="780" y="90" width="170" height="220" rx="12" fill="#eefcff" stroke="#285e61" stroke-width="3" />
+            <text x="865" y="210" text-anchor="middle" class="stage-label">Disinfection</text>
+          </g>
+
+          <g id="stage-distribution" class="stage-block" data-stage="5">
+            <rect x="980" y="110" width="180" height="200" rx="12" fill="#f0fff4" stroke="#276749" stroke-width="3" />
+            <text x="1070" y="210" text-anchor="middle" class="stage-label">Distribution</text>
+          </g>
+
+          <!-- Flow Arrows -->
+          <g stroke="#2d3748" stroke-width="4" fill="none" marker-end="url(#arrowHead)">
+            <line x1="160" y1="200" x2="190" y2="200" />
+            <line x1="350" y1="200" x2="380" y2="200" />
+            <line x1="550" y1="200" x2="580" y2="200" />
+            <line x1="750" y1="200" x2="780" y2="200" />
+            <line x1="950" y1="200" x2="980" y2="200" />
+          </g>
+
+          <defs>
+            <marker id="arrowHead" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L8,3 L0,6 z" fill="#2d3748" />
+            </marker>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="4" result="coloredBlur" />
+              <feMerge>
+                <feMergeNode in="coloredBlur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
+
+          <!-- Water Droplet (animated along path) -->
+          <path id="flowPath" d="M90 320 C 170 320, 250 320, 330 320 S 490 320, 570 320 S 650 320, 730 320 S 810 320, 890 320 S 970 320, 1050 320" stroke="transparent" fill="none" />
+          <g id="droplet" aria-label="Water droplet animation" tabindex="-1" aria-hidden="true">
+            <path d="M0 -14 C 4 -6, 8 -2, 8 4 A8 8 0 1 1 -8 4 C -8 -2, -4 -6, 0 -14" fill="#3182ce" stroke="#1a5276" stroke-width="2" />
+          </g>
+        </svg>
+      </div>
+    </section>
+
+    <aside class="info-panel" aria-label="Stage information">
+      <nav class="stage-nav" aria-label="Stages">
+        <ul id="stageList" role="list" aria-label="Water treatment stages"></ul>
+      </nav>
+      <div class="stage-content" id="stageContent" tabindex="0" aria-live="polite"></div>
+      <div class="controls" aria-label="Playback controls">
+        <button id="prevBtn" class="btn" aria-label="Previous stage">◀ Prev</button>
+        <button id="playPauseBtn" class="btn" aria-label="Play animation">▶ Play</button>
+        <button id="nextBtn" class="btn" aria-label="Next stage">Next ▶</button>
+        <label class="speed-label">Speed
+          <select id="speedSelect" aria-label="Animation speed">
+            <option value="1">Normal</option>
+            <option value="0.5">Slow</option>
+            <option value="1.5">Fast</option>
+          </select>
+        </label>
+        <label class="auto-advance"><input type="checkbox" id="autoAdvance" /> Auto-advance</label>
+      </div>
+
+      <section class="quiz" aria-labelledby="quizHeading">
+        <h2 id="quizHeading">Quick Check</h2>
+        <p>Test your understanding of water treatment.</p>
+        <div id="quizContainer"></div>
+        <button id="newQuizBtn" class="btn secondary">New Question</button>
+      </section>
+
+      <section class="lab" aria-labelledby="labHeading">
+        <h2 id="labHeading">Lab Simulation</h2>
+        <p class="small">Adjust the coagulant dose and mixing intensity to see how floc formation changes and how that affects turbidity later.</p>
+        <form class="lab-controls" aria-describedby="labNote">
+          <label>Coagulant Dose (mg/L)
+            <input type="range" id="doseRange" min="0" max="100" value="40" step="5" aria-label="Coagulant dose in milligrams per liter" />
+            <output id="doseValue" for="doseRange">40</output>
+          </label>
+          <label>Mix Intensity (G-value)
+            <input type="range" id="mixRange" min="10" max="120" value="60" step="10" aria-label="Mixing intensity G value" />
+            <output id="mixValue" for="mixRange">60</output>
+          </label>
+          <label>Mix Time (min)
+            <input type="range" id="timeRange" min="1" max="30" value="15" step="1" aria-label="Mix time minutes" />
+            <output id="timeValue" for="timeRange">15</output>
+          </label>
+          <div class="lab-metrics" id="labMetrics" aria-live="polite"></div>
+        </form>
+        <p id="labNote" class="small hint">Goal: medium-to-large stable floc (sweet spot) improves sedimentation & filtration.</p>
+        <div class="floc-visual" aria-hidden="true">
+          <canvas id="flocCanvas" width="300" height="150"></canvas>
+        </div>
+      </section>
+
+      <section class="graphs" aria-labelledby="graphsHeading">
+        <h2 id="graphsHeading">Water Quality Graphs</h2>
+        <p class="small">Track how turbidity (cloudiness) and microbes decrease through each stage.</p>
+        <div class="graph-row">
+          <figure>
+            <figcaption>Turbidity (NTU)</figcaption>
+            <svg id="turbidityGraph" viewBox="0 0 320 160" role="img" aria-label="Turbidity reduction line chart"></svg>
+          </figure>
+          <figure>
+            <figcaption>Microbes (relative count)</figcaption>
+            <svg id="microbeGraph" viewBox="0 0 320 160" role="img" aria-label="Microbial reduction line chart"></svg>
+          </figure>
+        </div>
+        <div class="graph-legend" id="graphLegend"></div>
+      </section>
+    </aside>
+  </main>
+
+  <footer>
+    <p>Designed for high school learning. Built with semantic HTML, accessible SVG, and vanilla JS.</p>
+  </footer>
+
+  <script src="js/app.js" type="module"></script>
+</body>
+</html>
