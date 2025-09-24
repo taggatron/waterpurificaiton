@@ -261,9 +261,17 @@ function smoothMoveDropletToStage(targetStage) {
   if (!manualDropletMode) {
     // fallback to original path approach
   }
+  // Use stored base position as authoritative starting point
   const match = /translate\(([-0-9.]+),\s*([-0-9.]+)\)/.exec(droplet.getAttribute('transform'));
-  let currentPoint = { x: 0, y: 0 };
-  if (match) currentPoint = { x: parseFloat(match[1]), y: parseFloat(match[2]) };
+  let currentPoint = { x: dropletBasePos.x, y: dropletBasePos.y };
+  if (match) {
+    const parsed = { x: parseFloat(match[1]), y: parseFloat(match[2]) };
+    // If parsed differs meaningfully (e.g., during first move) sync base
+    if (!Number.isNaN(parsed.x) && !Number.isNaN(parsed.y)) {
+      currentPoint = parsed;
+      dropletBasePos.x = parsed.x; dropletBasePos.y = parsed.y;
+    }
+  }
   const targetRect = document.querySelector(`.stage-block[data-stage="${targetStage}"] rect`);
   if (!targetRect) return;
   const targetX = parseFloat(targetRect.getAttribute('x')) + parseFloat(targetRect.getAttribute('width'))/2;
@@ -286,6 +294,8 @@ function smoothMoveDropletToStage(targetStage) {
       // store base position & restart bob
       dropletBasePos.x = targetX; dropletBasePos.y = targetY;
       dropletMoving = false;
+      // Ensure final snap exactly at base (avoid sub-pixel drift)
+      droplet.setAttribute('transform', `translate(${dropletBasePos.x}, ${dropletBasePos.y})`);
       startDropletBob();
     }
   }
